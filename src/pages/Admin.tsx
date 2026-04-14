@@ -1,48 +1,107 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Copy } from 'lucide-react';
-import { fetchBlobState, updateBlobState, isAdmin } from '../lib/store';
-import type { BlobState } from '../lib/store';
+import { fetchManageLoopBundle, getSessionEmail, saveNickname, setLoopPhase } from '../lib/store';
+import type { ManageLoopBundle } from '../lib/store';
 
 export default function Admin() {
     const { loopId } = useParams();
-    const [data, setData] = useState<BlobState | null>(null);
+    const [data, setData] = useState<ManageLoopBundle | null>(null);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
+    const [nicknameDrafts, setNicknameDrafts] = useState<Record<string, string>>({});
+    const [authorized, setAuthorized] = useState(true);
 
-    useEffect(() => {
-        if (loopId) {
-            if (!isAdmin(loopId)) {
-                alert("You are not the admin of this loop!");
+    const loadData = useCallback(async () => {
+        if (!loopId) return;
+        setLoading(true);
+        try {
+            const [bundle, sessionEmail] = await Promise.all([fetchManageLoopBundle(loopId), getSessionEmail()]);
+            const isLoopAdmin = sessionEmail?.toLowerCase() === bundle.loop.admin_email.toLowerCase();
+            setAuthorized(Boolean(isLoopAdmin));
+
+            if (!isLoopAdmin) {
+                setData(bundle);
+                return;
             }
 
-            fetchBlobState(loopId)
-                .then(setData)
-                .catch(console.error)
-                .finally(() => setLoading(false));
+            setData(bundle);
+            const initialDrafts = bundle.invitedUsers.reduce<Record<string, string>>((acc, user) => {
+                acc[user.email] = user.nickname ?? '';
+                return acc;
+            }, {});
+            setNicknameDrafts(initialDrafts);
+        } catch (error) {
+            console.error(error);
+            const message = error instanceof Error ? error.message : 'Failed to load loop.';
+            alert(message);
+        } finally {
+            setLoading(false);
         }
     }, [loopId]);
 
-    const advancePhase = async (newPhase: 1 | 2 | 3) => {
+    useEffect(() => {
+        void loadData();
+    }, [loadData]);
+
+    const advancePhase = async () => {
         if (!data || !loopId) return;
+
+        const currentPhase = data.loop.phase;
+        if (currentPhase === 3) {
+            alert('Published loops are locked and cannot change phase.');
+            return;
+        }
+
+        const nextPhase = (currentPhase + 1) as 2 | 3;
         setSyncing(true);
-        const updated = { ...data, loop: { ...data.loop, phase: newPhase } };
-        await updateBlobState(loopId, updated);
-        setData(updated);
-        setSyncing(false);
+        try {
+            const updatedLoop = await setLoopPhase(loopId, nextPhase);
+            setData({ ...data, loop: updatedLoop });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to move phase.';
+            alert(message);
+        } finally {
+            setSyncing(false);
+        }
     };
 
     const copyInvite = () => {
-        const url = `${window.location.origin}/submit/${loopId}/user`;
+        const url = `${window.location.origin}/submit/${loopId}`;
         navigator.clipboard.writeText(url);
         alert('Invite link copied!');
     };
 
+    const onNicknameChange = (email: string, value: string) => {
+        setNicknameDrafts((previous) => ({ ...previous, [email]: value }));
+    };
+
+    const onSaveNickname = async (email: string) => {
+        const nickname = nicknameDrafts[email] ?? '';
+
+        setSyncing(true);
+        try {
+            await saveNickname(email, nickname);
+            await loadData();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to save nickname.';
+            alert(message);
+        } finally {
+            setSyncing(false);
+        }
+    };
+
     if (loading) return <div className="spinner" style={{ marginTop: '20vh' }}></div>;
     if (!data) return <div className="empty-state">Loop not found.</div>;
+    if (!authorized) {
+        return (
+            <div className="empty-state" style={{ marginTop: '10vh' }}>
+                This page is only available to the loop admin.
+            </div>
+        );
+    }
 
-    const phase = data.loop.phase || 1;
-
+    const phase = data.loop.phase;
     return (
         <div className="container" style={{ maxWidth: '700px' }}>
             <div style={{ marginBottom: '2rem' }}>
@@ -62,17 +121,11 @@ export default function Admin() {
 
             <div className="card" style={{ marginBottom: '2rem', background: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
                 <h3>Control Panel</h3>
-                <p style={{ marginBottom: '1.5rem', fontSize: '0.95rem' }}>Move the loop forward through its phases.</p>
+                <p style={{ marginBottom: '1.5rem', fontSize: '0.95rem' }}>Move forward only: Questions -&gt; Answers -&gt; Published.</p>
 
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button onClick={() => advancePhase(1)} disabled={phase === 1 || syncing} className={phase === 1 ? 'btn' : 'btn btn-secondary'}>
-                        Phase 1: Questions
-                    </button>
-                    <button onClick={() => advancePhase(2)} disabled={phase === 2 || syncing} className={phase === 2 ? 'btn' : 'btn btn-secondary'}>
-                        Phase 2: Answers
-                    </button>
-                    <button onClick={() => advancePhase(3)} disabled={phase === 3 || syncing} className={phase === 3 ? 'btn' : 'btn btn-secondary'}>
-                        Phase 3: Close Loop
+                    <button onClick={advancePhase} disabled={phase === 3 || syncing} className="btn">
+                        {phase === 1 ? 'Move to Phase 2: Answers' : phase === 2 ? 'Publish Loop (Phase 3)' : 'Published and Locked'}
                     </button>
                 </div>
             </div>
@@ -85,26 +138,35 @@ export default function Admin() {
                 </div>
             )}
 
-            <h3>Live Data Preview</h3>
-            <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>You can see exactly what answers have been submitted securely.</p>
+            <h3>Nicknames</h3>
+            <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                Nicknames are global and appear everywhere in all loops.
+            </p>
 
-            {data.questions.map((q) => {
-                const ansList = data.answers.filter(a => a.question_id === q.id);
-                return (
-                    <div key={q.id} style={{ background: 'var(--surface-color)', borderRadius: 'var(--radius-lg)', padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid var(--surface-border)' }}>
-                        <h4 style={{ color: 'white', fontSize: '1.1rem', marginBottom: '1rem' }}>Q: {q.text} <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 400 }}>({q.author})</span></h4>
-                        {ansList.length === 0 ? <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>No answers yet.</p> : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                {ansList.map(a => (
-                                    <div key={a.id} style={{ background: 'rgba(0,0,0,0.2)', padding: '0.8rem', borderRadius: '4px' }}>
-                                        <strong style={{ color: 'var(--primary-color)' }}>{a.author}</strong>: {a.text}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '2rem' }}>
+                {data.invitedUsers.map((user) => (
+                    <div key={user.email} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto', gap: '0.6rem', alignItems: 'center', background: 'var(--surface-color)', borderRadius: '8px', padding: '0.8rem' }}>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{user.email}</div>
+                        <input
+                            value={nicknameDrafts[user.email] ?? ''}
+                            onChange={(event) => onNicknameChange(user.email, event.target.value)}
+                            placeholder="Set nickname"
+                            disabled={syncing}
+                        />
+                        <button className="btn btn-secondary" onClick={() => onSaveNickname(user.email)} disabled={syncing}>
+                            Save
+                        </button>
                     </div>
-                );
-            })}
+                ))}
+            </div>
+
+            {data.loop.phase === 3 ? (
+                <div style={{ background: 'var(--surface-color)', borderRadius: 'var(--radius-lg)', padding: '1.2rem', border: '1px solid var(--surface-border)' }}>
+                    <p style={{ fontSize: '0.9rem' }}>
+                        This loop is published and locked. No further management actions are available.
+                    </p>
+                </div>
+            ) : null}
         </div>
     );
 }

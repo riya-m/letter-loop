@@ -1,44 +1,52 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { fetchBlobState, updateBlobState } from '../lib/store';
-import type { BlobState } from '../lib/store';
+import { addAnswer, addQuestion, buildNicknameMap, fetchLoopBundle, getDisplayName, getSessionEmail } from '../lib/store';
+import type { LoopBundle } from '../lib/store';
 
 export default function SubmitUpdate() {
     const { loopId } = useParams();
-    const [name, setName] = useState('');
-    const [hasName, setHasName] = useState(false);
-    const [data, setData] = useState<BlobState | null>(null);
+    const [data, setData] = useState<LoopBundle | null>(null);
+    const [viewerEmail, setViewerEmail] = useState<string | null>(null);
 
     const [newQuestion, setNewQuestion] = useState('');
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
 
-    useEffect(() => {
-        if (loopId) {
-            fetchBlobState(loopId).then(setData)
-                .catch(() => alert("Could not load the loop. It might not exist."))
-                .finally(() => setLoading(false));
+    const loadData = useCallback(async () => {
+        if (!loopId) return;
+        setLoading(true);
+        try {
+            const [bundle, email] = await Promise.all([fetchLoopBundle(loopId), getSessionEmail()]);
+            setData(bundle);
+            setViewerEmail(email);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Could not load loop.';
+            alert(message);
+        } finally {
+            setLoading(false);
         }
     }, [loopId]);
+
+    useEffect(() => {
+        void loadData();
+    }, [loadData]);
 
     const handleAddQuestion = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newQuestion.trim() || !data || !loopId) return;
 
         setSyncing(true);
-        const updatedState = { ...data };
-        updatedState.questions.push({
-            id: Math.random().toString(36).substring(7),
-            text: newQuestion,
-            author: name,
-            created_at: new Date().toISOString()
-        });
-
-        await updateBlobState(loopId, updatedState);
-        setData(updatedState);
-        setNewQuestion('');
-        setSyncing(false);
+        try {
+            await addQuestion(loopId, newQuestion);
+            setNewQuestion('');
+            await loadData();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to add question.';
+            alert(message);
+        } finally {
+            setSyncing(false);
+        }
     };
 
     const handleAddAnswer = async (e: React.FormEvent, questionId: string) => {
@@ -47,25 +55,25 @@ export default function SubmitUpdate() {
         if (!txt?.trim() || !data || !loopId) return;
 
         setSyncing(true);
-        const updatedState = { ...data };
-        updatedState.answers.push({
-            id: Math.random().toString(36).substring(7),
-            question_id: questionId,
-            text: txt,
-            author: name,
-            created_at: new Date().toISOString()
-        });
-
-        await updateBlobState(loopId, updatedState);
-        setData(updatedState);
-        setAnswers({ ...answers, [questionId]: '' });
-        setSyncing(false);
+        try {
+            await addAnswer(loopId, questionId, txt);
+            setAnswers({ ...answers, [questionId]: '' });
+            await loadData();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to add answer.';
+            alert(message);
+        } finally {
+            setSyncing(false);
+        }
     };
 
     if (loading) return <div className="spinner" style={{ marginTop: '20vh' }}></div>;
     if (!data) return <div className="empty-state">Loop not found.</div>;
+    if (!viewerEmail) return <div className="empty-state">You must be logged in.</div>;
 
-    const phase = data.loop.phase || 1;
+    const phase = data.loop.phase;
+    const nicknameMap = buildNicknameMap(data.invitedUsers);
+    const viewerName = getDisplayName(viewerEmail, nicknameMap);
 
     if (phase === 3) {
         return (
@@ -76,33 +84,12 @@ export default function SubmitUpdate() {
         );
     }
 
-    if (!hasName) {
-        return (
-            <div className="container" style={{ marginTop: '5vh' }}>
-                <div className="card" style={{ maxWidth: '400px', margin: '0 auto' }}>
-                    <h2>Join the Loop</h2>
-                    <p style={{ marginBottom: '2rem' }}>Enter your name to view and participate in {data.loop.title}.</p>
-                    <form onSubmit={e => { e.preventDefault(); setHasName(true); }}>
-                        <input
-                            autoFocus
-                            placeholder="Your name"
-                            value={name}
-                            onChange={e => setName(e.target.value)}
-                            required
-                            style={{ marginBottom: '1rem' }}
-                        />
-                        <button className="btn" style={{ width: '100%' }}>Enter</button>
-                    </form>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="container" style={{ marginTop: '5vh', maxWidth: '700px' }}>
             <div style={{ marginBottom: '2rem' }}>
                 <h1 style={{ color: 'white' }}>{data.loop.title}</h1>
                 <p>{data.loop.description}</p>
+                <p style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>Signed in as <strong>{viewerName}</strong></p>
                 <div style={{ display: 'inline-block', padding: '0.2rem 0.6rem', background: 'var(--primary-color)', borderRadius: '1rem', fontSize: '0.8rem', marginTop: '1rem', fontWeight: 'bold' }}>
                     Phase {phase}: {phase === 1 ? 'Proposing Questions' : 'Submitting Answers'}
                 </div>
@@ -133,10 +120,12 @@ export default function SubmitUpdate() {
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     {data.questions.map(q => {
+                        const askedBy = getDisplayName(q.author_email, nicknameMap);
+                        const alreadyAnswered = data.answers.some((a) => a.question_id === q.id && a.author_email.toLowerCase() === viewerEmail.toLowerCase());
                         return (
                             <div key={q.id} style={{ background: 'var(--surface-color)', padding: '1.5rem', borderRadius: 'var(--radius-lg)' }}>
                                 <div style={{ marginBottom: phase === 2 ? '1rem' : 0 }}>
-                                    <span style={{ fontSize: '0.8rem', color: 'var(--primary-color)', fontWeight: 'bold' }}>{q.author} asked:</span>
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--primary-color)', fontWeight: 'bold' }}>{askedBy} asked:</span>
                                     <p style={{ color: 'white', fontSize: '1.1rem', fontWeight: 500, marginTop: '0.2rem' }}>{q.text}</p>
                                 </div>
 
@@ -146,14 +135,14 @@ export default function SubmitUpdate() {
                                             placeholder="Your secret answer..."
                                             value={answers[q.id] || ''}
                                             onChange={e => setAnswers({ ...answers, [q.id]: e.target.value })}
-                                            disabled={syncing}
+                                            disabled={syncing || alreadyAnswered}
                                             required
                                             style={{ flex: 1, padding: '0.5rem 1rem' }}
                                         />
-                                        <button className="btn btn-secondary" disabled={syncing} style={{ padding: '0.5rem 1rem' }}>Send</button>
+                                        <button className="btn btn-secondary" disabled={syncing || alreadyAnswered} style={{ padding: '0.5rem 1rem' }}>Send</button>
                                     </form>
                                 )}
-                                {phase === 2 && data.answers.some(a => a.question_id === q.id && a.author === name) && (
+                                {phase === 2 && alreadyAnswered && (
                                     <p style={{ fontSize: '0.85rem', color: '#10b981', marginTop: '0.5rem' }}>✓ You answered this.</p>
                                 )}
                             </div>

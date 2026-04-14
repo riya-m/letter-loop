@@ -1,28 +1,37 @@
-export interface User {
-    id: string;
-    email?: string;
+export type LoopPhase = 1 | 2 | 3;
+
+export interface InvitedEmail {
+  email: string;
+  active: boolean;
+  is_admin: boolean;
+  nickname: string | null;
+  created_at: string;
 }
 
 export interface Loop {
-    id: string;
-    user_id: string;
-    title: string;
-    description?: string;
-    created_at: string;
+  id: string;
+  title: string;
+  description: string | null;
+  phase: LoopPhase;
+  admin_email: string;
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
 }
 
-export interface Contributor {
-    id: string;
-    loop_id: string;
-    name: string;
-    email: string;
+export interface Question {
+  id: string;
+  loop_id: string;
+  author_email: string;
+  text: string;
+  created_at: string;
 }
 
-export interface Submission {
-    id: string;
-    loop_id: string;
-    contributor_id: string;
-    content: string;
-    created_at: string;
-    contributors?: Contributor;
+export interface Answer {
+  id: string;
+  loop_id: string;
+  question_id: string;
+  author_email: string;
+  text: string;
+  created_at: string;
 }

@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Share2 } from 'lucide-react';
-import { fetchBlobState } from '../lib/store';
-import type { BlobState } from '../lib/store';
+import { buildNicknameMap, fetchLoopBundle, getDisplayName } from '../lib/store';
+import type { LoopBundle } from '../lib/store';
 
 export default function Newsletter() {
     const { loopId } = useParams();
-    const [data, setData] = useState<BlobState | null>(null);
+    const [data, setData] = useState<LoopBundle | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (loopId) {
-            fetchBlobState(loopId)
+            fetchLoopBundle(loopId)
                 .then(setData)
                 .catch(console.error)
                 .finally(() => setLoading(false));
@@ -25,6 +25,17 @@ export default function Newsletter() {
 
     if (loading) return <div className="spinner" style={{ marginTop: '20vh' }}></div>;
     if (!data) return <div className="empty-state">Newsletter not found.</div>;
+    if (data.loop.phase !== 3) {
+        return (
+            <div className="container" style={{ marginTop: '10vh', textAlign: 'center' }}>
+                <h2>This loop is not published yet.</h2>
+                <p>Come back once the admin moves it to phase 3.</p>
+            </div>
+        );
+    }
+
+    const nicknameMap = buildNicknameMap(data.invitedUsers);
+    const issueNumber = data.loop.created_at.slice(0, 10).replaceAll('-', '');
 
     return (
         <div className="container" style={{ maxWidth: '700px' }}>
@@ -36,7 +47,7 @@ export default function Newsletter() {
                     <div>
                         <h1 style={{ color: 'white', letterSpacing: '-0.02em', fontSize: '3rem', marginBottom: '0.5rem' }}>{data.loop.title}</h1>
                         <p style={{ color: 'var(--primary-color)', fontWeight: '500' }}>
-                            Issue #{Math.floor(Math.random() * 10) + 1} &bull; {new Date().toLocaleDateString()}
+                            Issue #{issueNumber} &bull; {data.loop.published_at ? new Date(data.loop.published_at).toLocaleDateString() : 'Unpublished draft'}
                         </p>
                     </div>
                     <button onClick={handleShare} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }} title="Copy Link">
@@ -51,6 +62,7 @@ export default function Newsletter() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
                     {data.questions.map((q) => {
                         const ansList = data.answers.filter(a => a.question_id === q.id);
+                        const questionAuthor = getDisplayName(q.author_email, nicknameMap);
                         return (
                             <div key={q.id} style={{
                                 background: 'var(--surface-color)',
@@ -60,7 +72,7 @@ export default function Newsletter() {
                             }}>
                                 <h2 style={{ color: 'white', fontSize: '1.4rem', marginBottom: '1.5rem', lineHeight: 1.4 }}>
                                     <span style={{ color: 'var(--primary-color)' }}>Q:</span> {q.text}
-                                    <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem', fontWeight: 400 }}>Asked by {q.author}</span>
+                                    <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem', fontWeight: 400 }}>Asked by {questionAuthor}</span>
                                 </h2>
 
                                 {ansList.length === 0 ? (
@@ -75,9 +87,9 @@ export default function Newsletter() {
                                             }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                                                     <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--accent-color)', color: 'black', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 'bold' }}>
-                                                        {ans.author.charAt(0).toUpperCase()}
+                                                        {getDisplayName(ans.author_email, nicknameMap).charAt(0).toUpperCase()}
                                                     </div>
-                                                    <span style={{ fontWeight: 'bold', color: 'white', fontSize: '0.9rem' }}>{ans.author}</span>
+                                                    <span style={{ fontWeight: 'bold', color: 'white', fontSize: '0.9rem' }}>{getDisplayName(ans.author_email, nicknameMap)}</span>
                                                 </div>
                                                 <p style={{ color: '#cbd5e1', lineHeight: 1.5 }}>
                                                     {ans.text}
@@ -94,7 +106,7 @@ export default function Newsletter() {
 
             <div style={{ textAlign: 'center', margin: '4rem 0 2rem 0', padding: '2rem', borderTop: '1px solid var(--surface-border)' }}>
                 <p style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                    Collected via <strong>Pulse</strong>
+                    Collected via <strong>LetterLoop</strong>
                 </p>
             </div>
         </div>

@@ -1,14 +1,6 @@
 {
     "rewrites": [
         {
-            "source": "/api/jsonBlob",
-            "destination": "https://jsonblob.com/api/jsonBlob"
-        },
-        {
-            "source": "/api/jsonBlob/(.*)",
-            "destination": "https://jsonblob.com/api/jsonBlob/$1"
-        },
-        {
             "source": "/(.*)",
             "destination": "/index.html"
         }

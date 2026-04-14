@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createLoopBlob, addAdminLoop } from '../lib/store';
+import { createLoop } from '../lib/store';
 
 export default function CreateLoop() {
     const [title, setTitle] = useState('');
@@ -13,12 +13,12 @@ export default function CreateLoop() {
         setLoading(true);
 
         try {
-            const blobId = await createLoopBlob(title, description);
-            addAdminLoop(blobId, title, description);
+            await createLoop(title, description);
             navigate('/');
         } catch (err) {
             console.error(err);
-            alert('Failed to connect to blob store.');
+            const message = err instanceof Error ? err.message : 'Failed to create loop.';
+            alert(message);
         } finally {
             setLoading(false);
         }

@@ -27,11 +27,37 @@ export interface Question {
   created_at: string;
 }
 
-export interface Answer {
+export interface QuestionAnswer {
   id: string;
   loop_id: string;
   question_id: string;
   author_email: string;
   text: string;
+  image_url: string | null;
+  image_path: string | null;
+  image_mime: string | null;
+  image_size: number | null;
+  created_at: string;
+}
+
+export interface SectionPrompt {
+  id: string;
+  loop_id: string;
+  key: 'announcements' | 'shoutouts' | 'mann_ki_baat';
+  title: string;
+  display_order: number;
+  created_at: string;
+}
+
+export interface PromptAnswer {
+  id: string;
+  loop_id: string;
+  prompt_id: string;
+  author_email: string;
+  text: string;
+  image_url: string | null;
+  image_path: string | null;
+  image_mime: string | null;
+  image_size: number | null;
   created_at: string;
 }

@@ -140,7 +140,9 @@ export default function SubmitUpdate() {
   const handlePromptImageChange = async (promptId: string, file: File | null) => {
     if (!file || !loopId) {
       setPromptImageDrafts((prev) => ({ ...prev, [promptId]: null }));
-      scheduleDraftSave(() => saveAnswerDraft(loopId, 'prompt', promptId, promptAnswers[promptId] ?? ''));
+      if (loopId) {
+        scheduleDraftSave(() => saveAnswerDraft(loopId, 'prompt', promptId, promptAnswers[promptId] ?? '', undefined));
+      }
       return;
     }
 
@@ -163,7 +165,9 @@ export default function SubmitUpdate() {
   const handleQuestionImageChange = async (questionId: string, file: File | null) => {
     if (!file || !loopId) {
       setQuestionImageDrafts((prev) => ({ ...prev, [questionId]: null }));
-      scheduleDraftSave(() => saveAnswerDraft(loopId, 'question', questionId, questionAnswers[questionId] ?? ''));
+      if (loopId) {
+        scheduleDraftSave(() => saveAnswerDraft(loopId, 'question', questionId, questionAnswers[questionId] ?? '', undefined));
+      }
       return;
     }
 

@@ -2,26 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Copy } from 'lucide-react';
 import { fetchManageLoopBundle, getSessionEmail, saveNickname, setLoopPhase } from '../lib/store';
-import { supabase } from '../lib/supabase';
-
-const notifyLoop = async (loopId: string, eventType: 'phase1' | 'phase2' | 'phase3') => {
-    try {
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
-        if (!token) return;
-
-        await fetch('/api/notify-loop', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ loopId, eventType }),
-        });
-    } catch {
-        return;
-    }
-};
 import type { ManageLoopBundle } from '../lib/store';
 
 export default function Admin() {
@@ -78,12 +58,6 @@ export default function Admin() {
         try {
             const updatedLoop = await setLoopPhase(loopId, nextPhase);
             setData({ ...data, loop: updatedLoop });
-            if (nextPhase === 2) {
-                await notifyLoop(loopId, 'phase2');
-            }
-            if (nextPhase === 3) {
-                await notifyLoop(loopId, 'phase3');
-            }
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to move phase.';
             alert(message);

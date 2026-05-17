@@ -1,10 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 
-declare const process: {
-  env: Record<string, string | undefined>;
-};
-
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const resendKey = process.env.RESEND_API_KEY;

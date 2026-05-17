@@ -61,3 +61,23 @@ export interface PromptAnswer {
   image_size: number | null;
   created_at: string;
 }
+
+export interface QuestionDraft {
+  loop_id: string;
+  author_email: string;
+  text: string;
+  updated_at: string;
+}
+
+export interface AnswerDraft {
+  loop_id: string;
+  item_type: 'prompt' | 'question';
+  item_id: string;
+  author_email: string;
+  text: string;
+  image_url: string | null;
+  image_path: string | null;
+  image_mime: string | null;
+  image_size: number | null;
+  updated_at: string;
+}

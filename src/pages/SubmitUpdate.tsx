@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  answerFixedPrompt,
-  answerQuestion,
   buildNicknameMap,
+  clearQuestionDraft,
   fetchLoopBundle,
   getDisplayName,
   getSessionEmail,
+  getQuestionDraft,
+  listAnswerDrafts,
   addQuestion,
+  saveAnswerDraft,
+  saveQuestionDraft,
   uploadAnswerImage,
 } from '../lib/store';
 import type { LoopBundle, UploadedImage } from '../lib/store';
@@ -20,18 +23,61 @@ export default function SubmitUpdate() {
   const [newQuestion, setNewQuestion] = useState('');
   const [promptAnswers, setPromptAnswers] = useState<Record<string, string>>({});
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
-  const [promptImages, setPromptImages] = useState<Record<string, File | null>>({});
-  const [questionImages, setQuestionImages] = useState<Record<string, File | null>>({});
+  const [promptImageDrafts, setPromptImageDrafts] = useState<Record<string, UploadedImage | null>>({});
+  const [questionImageDrafts, setQuestionImageDrafts] = useState<Record<string, UploadedImage | null>>({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [draftState, setDraftState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [draftTimer, setDraftTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const loadData = useCallback(async () => {
     if (!loopId) return;
     setLoading(true);
     try {
-      const [bundle, email] = await Promise.all([fetchLoopBundle(loopId), getSessionEmail()]);
+      const [bundle, email, questionDraft, answerDrafts] = await Promise.all([
+        fetchLoopBundle(loopId),
+        getSessionEmail(),
+        getQuestionDraft(loopId),
+        listAnswerDrafts(loopId),
+      ]);
       setData(bundle);
       setViewerEmail(email);
+      if (questionDraft?.text) {
+        setNewQuestion(questionDraft.text);
+      }
+      if (answerDrafts.length > 0) {
+        const promptDrafts: Record<string, string> = {};
+        const questionDraftMap: Record<string, string> = {};
+        const promptImagesDraftMap: Record<string, UploadedImage | null> = {};
+        const questionImagesDraftMap: Record<string, UploadedImage | null> = {};
+        answerDrafts.forEach((draft) => {
+          if (draft.item_type === 'prompt') {
+            promptDrafts[draft.item_id] = draft.text;
+            promptImagesDraftMap[draft.item_id] = draft.image_url
+              ? {
+                  image_url: draft.image_url,
+                  image_path: draft.image_path ?? '',
+                  image_mime: draft.image_mime ?? '',
+                  image_size: draft.image_size ?? 0,
+                }
+              : null;
+          } else {
+            questionDraftMap[draft.item_id] = draft.text;
+            questionImagesDraftMap[draft.item_id] = draft.image_url
+              ? {
+                  image_url: draft.image_url,
+                  image_path: draft.image_path ?? '',
+                  image_mime: draft.image_mime ?? '',
+                  image_size: draft.image_size ?? 0,
+                }
+              : null;
+          }
+        });
+        setPromptAnswers((prev) => ({ ...promptDrafts, ...prev }));
+        setQuestionAnswers((prev) => ({ ...questionDraftMap, ...prev }));
+        setPromptImageDrafts((prev) => ({ ...promptImagesDraftMap, ...prev }));
+        setQuestionImageDrafts((prev) => ({ ...questionImagesDraftMap, ...prev }));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not load loop.';
       alert(message);
@@ -49,6 +95,30 @@ export default function SubmitUpdate() {
     return uploadAnswerImage(loopId, file);
   };
 
+  useEffect(() => {
+    return () => {
+      if (draftTimer) {
+        clearTimeout(draftTimer);
+      }
+    };
+  }, [draftTimer]);
+
+  const scheduleDraftSave = (saveAction: () => Promise<void>) => {
+    if (!loopId) return;
+    if (draftTimer) {
+      clearTimeout(draftTimer);
+    }
+
+    setDraftState('saving');
+    const timer = setTimeout(() => {
+      saveAction()
+        .then(() => setDraftState('saved'))
+        .catch(() => setDraftState('idle'));
+    }, 900);
+
+    setDraftTimer(timer);
+  };
+
   const handleAddQuestion = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!newQuestion.trim() || !data || !loopId) return;
@@ -57,6 +127,7 @@ export default function SubmitUpdate() {
     try {
       await addQuestion(loopId, newQuestion);
       setNewQuestion('');
+      await clearQuestionDraft(loopId);
       await loadData();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to add question.';
@@ -66,38 +137,46 @@ export default function SubmitUpdate() {
     }
   };
 
-  const handleSubmitPromptAnswer = async (event: React.FormEvent, promptId: string) => {
-    event.preventDefault();
-    if (!loopId) return;
+  const handlePromptImageChange = async (promptId: string, file: File | null) => {
+    if (!file || !loopId) {
+      setPromptImageDrafts((prev) => ({ ...prev, [promptId]: null }));
+      scheduleDraftSave(() => saveAnswerDraft(loopId, 'prompt', promptId, promptAnswers[promptId] ?? ''));
+      return;
+    }
 
     setSyncing(true);
     try {
-      const image = await uploadIfPresent(promptImages[promptId]);
-      await answerFixedPrompt(loopId, promptId, promptAnswers[promptId] ?? '', image);
-      setPromptAnswers((prev) => ({ ...prev, [promptId]: '' }));
-      setPromptImages((prev) => ({ ...prev, [promptId]: null }));
-      await loadData();
+      const image = await uploadIfPresent(file);
+      if (image) {
+        setPromptImageDrafts((prev) => ({ ...prev, [promptId]: image }));
+        await saveAnswerDraft(loopId, 'prompt', promptId, promptAnswers[promptId] ?? '', image);
+        setDraftState('saved');
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to submit answer.';
+      const message = error instanceof Error ? error.message : 'Failed to upload image.';
       alert(message);
     } finally {
       setSyncing(false);
     }
   };
 
-  const handleSubmitQuestionAnswer = async (event: React.FormEvent, questionId: string) => {
-    event.preventDefault();
-    if (!loopId) return;
+  const handleQuestionImageChange = async (questionId: string, file: File | null) => {
+    if (!file || !loopId) {
+      setQuestionImageDrafts((prev) => ({ ...prev, [questionId]: null }));
+      scheduleDraftSave(() => saveAnswerDraft(loopId, 'question', questionId, questionAnswers[questionId] ?? ''));
+      return;
+    }
 
     setSyncing(true);
     try {
-      const image = await uploadIfPresent(questionImages[questionId]);
-      await answerQuestion(loopId, questionId, questionAnswers[questionId] ?? '', image);
-      setQuestionAnswers((prev) => ({ ...prev, [questionId]: '' }));
-      setQuestionImages((prev) => ({ ...prev, [questionId]: null }));
-      await loadData();
+      const image = await uploadIfPresent(file);
+      if (image) {
+        setQuestionImageDrafts((prev) => ({ ...prev, [questionId]: image }));
+        await saveAnswerDraft(loopId, 'question', questionId, questionAnswers[questionId] ?? '', image);
+        setDraftState('saved');
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to submit answer.';
+      const message = error instanceof Error ? error.message : 'Failed to upload image.';
       alert(message);
     } finally {
       setSyncing(false);
@@ -120,6 +199,11 @@ export default function SubmitUpdate() {
         <p style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
           Signed in as <strong>{viewerName}</strong>
         </p>
+        {phase !== 3 ? (
+          <p style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            Drafts: {draftState === 'saving' ? 'Saving...' : draftState === 'saved' ? 'Saved' : 'Not saved'}
+          </p>
+        ) : null}
         <div className="phase-chip">
           {phase === 1 ? 'Phase 1: Add Questions ❓' : phase === 2 ? 'Phase 2: Share Answers ✍️' : 'Phase 3: Published 🎉'}
         </div>
@@ -136,7 +220,13 @@ export default function SubmitUpdate() {
               <textarea
                 placeholder="Ask something fun, thoughtful, or reflective..."
                 value={newQuestion}
-                onChange={(e) => setNewQuestion(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setNewQuestion(value);
+                  if (loopId) {
+                    scheduleDraftSave(() => saveQuestionDraft(loopId, value));
+                  }
+                }}
                 disabled={syncing}
                 required
               />
@@ -168,45 +258,45 @@ export default function SubmitUpdate() {
       {phase === 2 ? (
         <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginBottom: '2rem' }}>
-            {data.sectionPrompts.map((prompt) => {
-              const existing = data.promptAnswers.find(
-                (answer) => answer.prompt_id === prompt.id && answer.author_email.toLowerCase() === viewerEmail.toLowerCase(),
-              );
-
-              return (
-                <div className="card" key={prompt.id}>
-                  <h3>{prompt.title === 'Announcements' ? '📣 Announcements' : prompt.title === 'Shout-outs' ? '🙌 Shout-outs' : '💭 Mann-ki-baat'}</h3>
-                  {existing ? (
-                    <p style={{ color: '#16a34a', marginTop: '0.6rem' }}>✓ You already responded to this section.</p>
-                  ) : (
-                    <form onSubmit={(event) => handleSubmitPromptAnswer(event, prompt.id)}>
-                      <textarea
-                        placeholder="Write your response (optional if uploading image)..."
-                        value={promptAnswers[prompt.id] ?? ''}
-                        onChange={(e) => setPromptAnswers((prev) => ({ ...prev, [prompt.id]: e.target.value }))}
-                        disabled={syncing}
+            {data.sectionPrompts.map((prompt) => (
+              <div className="card" key={prompt.id}>
+                <h3>{prompt.title === 'Announcements' ? '📣 Announcements' : prompt.title === 'Shout-outs' ? '🙌 Shout-outs' : '💭 Mann-ki-baat'}</h3>
+                <div>
+                  <textarea
+                    placeholder="Write your response (optional if uploading image)..."
+                    value={promptAnswers[prompt.id] ?? ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setPromptAnswers((prev) => ({ ...prev, [prompt.id]: value }));
+                      if (loopId) {
+                        scheduleDraftSave(() => saveAnswerDraft(loopId, 'prompt', prompt.id, value, promptImageDrafts[prompt.id] ?? undefined));
+                      }
+                    }}
+                    disabled={syncing}
+                  />
+                  <div style={{ marginTop: '0.6rem' }}>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      disabled={syncing}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        void handlePromptImageChange(prompt.id, file);
+                      }}
+                    />
+                  </div>
+                  {promptImageDrafts[prompt.id]?.image_url ? (
+                    <div style={{ marginTop: '0.8rem' }}>
+                      <img
+                        src={promptImageDrafts[prompt.id]?.image_url ?? ''}
+                        alt="Draft upload"
+                        style={{ width: 'min(220px, 100%)', borderRadius: '10px', border: '1px solid var(--surface-border)' }}
                       />
-                      <div style={{ marginTop: '0.6rem' }}>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/gif"
-                          disabled={syncing}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0] ?? null;
-                            setPromptImages((prev) => ({ ...prev, [prompt.id]: file }));
-                          }}
-                        />
-                      </div>
-                      <div style={{ marginTop: '0.8rem', display: 'flex', justifyContent: 'flex-end' }}>
-                        <button className="btn" disabled={syncing}>
-                          Submit
-                        </button>
-                      </div>
-                    </form>
-                  )}
+                    </div>
+                  ) : null}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
 
           <h3 style={{ marginBottom: '0.8rem' }}>❓ Questions</h3>
@@ -214,47 +304,47 @@ export default function SubmitUpdate() {
             <div className="empty-state">No questions were added in phase 1.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {data.questions.map((question) => {
-                const existing = data.questionAnswers.find(
-                  (answer) => answer.question_id === question.id && answer.author_email.toLowerCase() === viewerEmail.toLowerCase(),
-                );
-
-                return (
-                  <div className="card" key={question.id}>
-                    <p style={{ marginBottom: '0.6rem', color: 'var(--text-primary)' }}>
-                      <strong>{getDisplayName(question.author_email, nicknameMap)}</strong> asked: {question.text}
-                    </p>
-                    {existing ? (
-                      <p style={{ color: '#16a34a' }}>✓ You already answered this question.</p>
-                    ) : (
-                      <form onSubmit={(event) => handleSubmitQuestionAnswer(event, question.id)}>
-                        <textarea
-                          placeholder="Write your response (optional if uploading image)..."
-                          value={questionAnswers[question.id] ?? ''}
-                          onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [question.id]: e.target.value }))}
-                          disabled={syncing}
+              {data.questions.map((question) => (
+                <div className="card" key={question.id}>
+                  <p style={{ marginBottom: '0.6rem', color: 'var(--text-primary)' }}>
+                    <strong>{getDisplayName(question.author_email, nicknameMap)}</strong> asked: {question.text}
+                  </p>
+                  <div>
+                    <textarea
+                      placeholder="Write your response (optional if uploading image)..."
+                      value={questionAnswers[question.id] ?? ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setQuestionAnswers((prev) => ({ ...prev, [question.id]: value }));
+                        if (loopId) {
+                          scheduleDraftSave(() => saveAnswerDraft(loopId, 'question', question.id, value, questionImageDrafts[question.id] ?? undefined));
+                        }
+                      }}
+                      disabled={syncing}
+                    />
+                    <div style={{ marginTop: '0.6rem' }}>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        disabled={syncing}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] ?? null;
+                          void handleQuestionImageChange(question.id, file);
+                        }}
+                      />
+                    </div>
+                    {questionImageDrafts[question.id]?.image_url ? (
+                      <div style={{ marginTop: '0.8rem' }}>
+                        <img
+                          src={questionImageDrafts[question.id]?.image_url ?? ''}
+                          alt="Draft upload"
+                          style={{ width: 'min(220px, 100%)', borderRadius: '10px', border: '1px solid var(--surface-border)' }}
                         />
-                        <div style={{ marginTop: '0.6rem' }}>
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,image/gif"
-                            disabled={syncing}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0] ?? null;
-                              setQuestionImages((prev) => ({ ...prev, [question.id]: file }));
-                            }}
-                          />
-                        </div>
-                        <div style={{ marginTop: '0.8rem', display: 'flex', justifyContent: 'flex-end' }}>
-                          <button className="btn" disabled={syncing}>
-                            Submit
-                          </button>
-                        </div>
-                      </form>
-                    )}
+                      </div>
+                    ) : null}
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </>

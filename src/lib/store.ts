@@ -3,9 +3,11 @@ import type {
   InvitedEmail,
   Loop,
   LoopPhase,
+  AnswerDraft,
   PromptAnswer,
   Question,
   QuestionAnswer,
+  QuestionDraft,
   SectionPrompt,
 } from '../types';
 
@@ -437,6 +439,145 @@ export const saveNickname = async (targetEmail: string, nickname: string): Promi
   }
 
   const { error } = await supabase.from('invited_emails').update({ nickname: trimmedNickname }).eq('email', email);
+  if (error) {
+    throw error;
+  }
+};
+
+export const getQuestionDraft = async (loopId: string): Promise<QuestionDraft | null> => {
+  const ctx = await ensureInvitedContext();
+
+  const { data, error } = await supabase
+    .from('question_drafts')
+    .select('loop_id, author_email, text, updated_at')
+    .eq('loop_id', loopId)
+    .eq('author_email', ctx.email)
+    .maybeSingle<QuestionDraft>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? null;
+};
+
+export const saveQuestionDraft = async (loopId: string, text: string): Promise<void> => {
+  const ctx = await ensureInvitedContext();
+  const trimmed = text.trim();
+
+  if (trimmed.length === 0) {
+    const { error } = await supabase
+      .from('question_drafts')
+      .delete()
+      .eq('loop_id', loopId)
+      .eq('author_email', ctx.email);
+
+    if (error) {
+      throw error;
+    }
+
+    return;
+  }
+
+  const { error } = await supabase.from('question_drafts').upsert({
+    loop_id: loopId,
+    author_email: ctx.email,
+    text: trimmed,
+    updated_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const clearQuestionDraft = async (loopId: string): Promise<void> => {
+  const ctx = await ensureInvitedContext();
+  const { error } = await supabase
+    .from('question_drafts')
+    .delete()
+    .eq('loop_id', loopId)
+    .eq('author_email', ctx.email);
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const listAnswerDrafts = async (loopId: string): Promise<AnswerDraft[]> => {
+  const ctx = await ensureInvitedContext();
+  const { data, error } = await supabase
+    .from('answer_drafts')
+    .select('loop_id, item_type, item_id, author_email, text, image_url, image_path, image_mime, image_size, updated_at')
+    .eq('loop_id', loopId)
+    .eq('author_email', ctx.email)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as AnswerDraft[];
+};
+
+export const saveAnswerDraft = async (
+  loopId: string,
+  itemType: 'prompt' | 'question',
+  itemId: string,
+  text: string,
+  image?: UploadedImage,
+): Promise<void> => {
+  const ctx = await ensureInvitedContext();
+  const trimmed = text.trim();
+
+  if (trimmed.length === 0 && !image) {
+    const { error } = await supabase
+      .from('answer_drafts')
+      .delete()
+      .eq('loop_id', loopId)
+      .eq('author_email', ctx.email)
+      .eq('item_type', itemType)
+      .eq('item_id', itemId);
+
+    if (error) {
+      throw error;
+    }
+
+    return;
+  }
+
+  const { error } = await supabase.from('answer_drafts').upsert({
+    loop_id: loopId,
+    item_type: itemType,
+    item_id: itemId,
+    author_email: ctx.email,
+    text: trimmed,
+    image_url: image?.image_url ?? null,
+    image_path: image?.image_path ?? null,
+    image_mime: image?.image_mime ?? null,
+    image_size: image?.image_size ?? null,
+    updated_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const clearAnswerDraft = async (
+  loopId: string,
+  itemType: 'prompt' | 'question',
+  itemId: string,
+): Promise<void> => {
+  const ctx = await ensureInvitedContext();
+  const { error } = await supabase
+    .from('answer_drafts')
+    .delete()
+    .eq('loop_id', loopId)
+    .eq('author_email', ctx.email)
+    .eq('item_type', itemType)
+    .eq('item_id', itemId);
+
   if (error) {
     throw error;
   }

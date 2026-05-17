@@ -33,8 +33,9 @@ export default function SubmitUpdate() {
   const [draftTimer, setDraftTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const sanitizeRichText = (value: string) => {
-    const sanitized = DOMPurify.sanitize(value, {
-      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a'],
+    const withDivsConverted = value.replace(/<div[^>]*>/gi, '<p>').replace(/<\/div>/gi, '</p>');
+    const sanitized = DOMPurify.sanitize(withDivsConverted, {
+      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a', 'div'],
       ALLOWED_ATTR: ['href', 'target', 'rel'],
     });
     return sanitized.replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ');
@@ -59,6 +60,7 @@ export default function SubmitUpdate() {
   }) => {
     const ref = useRef<HTMLDivElement | null>(null);
     const [focused, setFocused] = useState(false);
+    const selectionRef = useRef<Range | null>(null);
 
     useEffect(() => {
       if (!ref.current || focused) return;
@@ -67,8 +69,24 @@ export default function SubmitUpdate() {
       }
     }, [value, focused]);
 
+    const saveSelection = () => {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        selectionRef.current = sel.getRangeAt(0).cloneRange();
+      }
+    };
+
+    const restoreSelection = () => {
+      if (selectionRef.current) {
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(selectionRef.current);
+      }
+    };
+
     const exec = (command: string, commandValue?: string) => {
       if (disabled) return;
+      restoreSelection();
       document.execCommand(command, false, commandValue);
       const html = ref.current?.innerHTML ?? '';
       onChange(html === '<p><br></p>' ? '' : html);
@@ -82,29 +100,40 @@ export default function SubmitUpdate() {
       exec('createLink', normalized);
     };
 
+    const toolbarBtnStyle: React.CSSProperties = {
+      padding: '0.3rem 0.6rem',
+      fontSize: '0.85rem',
+      background: '#fff',
+      border: '1px solid var(--surface-border)',
+      borderRadius: '6px',
+      cursor: 'pointer',
+      color: 'var(--text-primary)',
+      fontWeight: 500,
+    };
+
     return (
       <div>
-        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('bold')}>
-            Bold
+        <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.5rem', flexWrap: 'wrap', padding: '0.4rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid var(--surface-border)' }}>
+          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('bold')}>
+            <strong>B</strong>
           </button>
-          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('italic')}>
-            Italic
+          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('italic')}>
+            <em>I</em>
           </button>
-          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('underline')}>
-            Underline
+          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('underline')}>
+            <u>U</u>
           </button>
-          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('insertOrderedList')}>
+          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('insertOrderedList')}>
             1.
           </button>
-          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('insertUnorderedList')}>
+          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('insertUnorderedList')}>
             •
           </button>
-          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={handleLink}>
-            Link
+          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={handleLink}>
+            🔗
           </button>
-          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('removeFormat')}>
-            Clear
+          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('removeFormat')}>
+            ✕
           </button>
         </div>
         <div

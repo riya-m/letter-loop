@@ -2,8 +2,9 @@ import { useState, useEffect, type CSSProperties } from 'react';
 import DOMPurify from 'dompurify';
 
 const sanitizeRichText = (value: string) => {
-  const sanitized = DOMPurify.sanitize(value, {
-    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a'],
+  const withDivsConverted = value.replace(/<div[^>]*>/gi, '<p>').replace(/<\/div>/gi, '</p>');
+  const sanitized = DOMPurify.sanitize(withDivsConverted, {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a', 'div'],
     ALLOWED_ATTR: ['href', 'target', 'rel'],
   });
   return sanitized.replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ');

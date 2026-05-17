@@ -12,28 +12,30 @@ const toolbarBtnStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  minWidth: '32px',
-  height: '32px',
-  padding: '0 0.5rem',
-  fontSize: '0.85rem',
-  background: '#fff',
-  border: '1px solid var(--surface-border)',
-  borderRadius: '6px',
+  minWidth: '36px',
+  height: '36px',
+  padding: '0 0.6rem',
+  fontSize: '0.9rem',
+  background: '#ffffff',
+  border: '2px solid #d97706',
+  borderRadius: '8px',
   cursor: 'pointer',
-  color: 'var(--text-primary)',
-  fontWeight: 600,
+  color: '#31281f',
+  fontWeight: 700,
   transition: 'all 0.15s ease',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
 };
 
 const toolbarContainerStyle: CSSProperties = {
   display: 'flex',
-  gap: '0.3rem',
-  marginBottom: '0.5rem',
+  gap: '0.4rem',
+  marginBottom: '0.6rem',
   flexWrap: 'wrap',
-  padding: '0.5rem',
-  background: '#f8fafc',
-  borderRadius: '8px',
-  border: '1px solid var(--surface-border)',
+  padding: '0.6rem',
+  background: '#fffbeb',
+  borderRadius: '10px',
+  border: '2px solid #d97706',
+  boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
 };
 
 export default function RichTextEditor({
@@ -89,25 +91,25 @@ export default function RichTextEditor({
   return (
     <div>
       <div style={toolbarContainerStyle}>
-        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('bold')}>
+        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('bold')} onMouseEnter={(e) => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.color = '#fff'; }} onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#31281f'; }}>
           <strong>B</strong>
         </button>
-        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('italic')}>
+        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('italic')} onMouseEnter={(e) => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.color = '#fff'; }} onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#31281f'; }}>
           <em>I</em>
         </button>
-        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('underline')}>
+        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('underline')} onMouseEnter={(e) => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.color = '#fff'; }} onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#31281f'; }}>
           <u>U</u>
         </button>
-        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('insertOrderedList')}>
+        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('insertOrderedList')} onMouseEnter={(e) => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.color = '#fff'; }} onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#31281f'; }}>
           1.
         </button>
-        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('insertUnorderedList')}>
+        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('insertUnorderedList')} onMouseEnter={(e) => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.color = '#fff'; }} onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#31281f'; }}>
           •
         </button>
-        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={handleLink}>
+        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={handleLink} onMouseEnter={(e) => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.color = '#fff'; }} onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#31281f'; }}>
           🔗
         </button>
-        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('removeFormat')}>
+        <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('removeFormat')} onMouseEnter={(e) => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.color = '#fff'; }} onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.color = '#31281f'; }}>
           ✕
         </button>
       </div>

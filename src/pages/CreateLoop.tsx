@@ -1,6 +1,26 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createLoop } from '../lib/store';
+import { supabase } from '../lib/supabase';
+
+const notifyLoop = async (loopId: string, eventType: 'phase1' | 'phase2' | 'phase3') => {
+    try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) return;
+
+        await fetch('/api/notify-loop', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ loopId, eventType }),
+        });
+    } catch {
+        return;
+    }
+};
 
 export default function CreateLoop() {
     const [title, setTitle] = useState('');
@@ -13,7 +33,8 @@ export default function CreateLoop() {
         setLoading(true);
 
         try {
-            await createLoop(title, description);
+            const loopId = await createLoop(title, description);
+            await notifyLoop(loopId, 'phase1');
             navigate('/');
         } catch (err) {
             console.error(err);

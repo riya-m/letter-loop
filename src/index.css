@@ -145,6 +145,29 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(215, 167, 110, 0.25);
 }
 
+.rich-editor {
+  background: #fffdfa;
+  border: 1px solid var(--surface-border);
+  color: var(--text-primary);
+  padding: 0.72rem 0.9rem;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  width: 100%;
+  min-height: 140px;
+  line-height: 1.5;
+}
+
+.rich-editor:focus {
+  outline: none;
+  border-color: #d7a76e;
+  box-shadow: 0 0 0 3px rgba(215, 167, 110, 0.25);
+}
+
+.rich-editor:empty:before {
+  content: attr(data-placeholder);
+  color: var(--text-secondary);
+}
+
 .container {
   max-width: 860px;
   margin: 0 auto;

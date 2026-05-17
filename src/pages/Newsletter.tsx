@@ -1,4 +1,13 @@
 import { useState, useEffect, type CSSProperties } from 'react';
+import DOMPurify from 'dompurify';
+
+const sanitizeRichText = (value: string) => {
+  const sanitized = DOMPurify.sanitize(value, {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a'],
+    ALLOWED_ATTR: ['href', 'target', 'rel'],
+  });
+  return sanitized.replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ');
+};
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Share2 } from 'lucide-react';
 import { buildNicknameMap, fetchLoopBundle, getDisplayName } from '../lib/store';
@@ -48,6 +57,7 @@ export default function Newsletter() {
     id: string,
     authorEmail: string,
     text: string,
+    richText: string | null,
     imageUrl: string | null,
   ) => {
     const displayName = getDisplayName(authorEmail, nicknameMap);
@@ -62,7 +72,14 @@ export default function Newsletter() {
         }}
       >
         <p style={{ fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>{displayName}</p>
-        {text ? <p style={{ marginBottom: imageUrl ? '0.8rem' : 0 }}>{text}</p> : null}
+        {richText ? (
+          <div
+            style={{ marginBottom: imageUrl ? '0.8rem' : 0 }}
+            dangerouslySetInnerHTML={{ __html: sanitizeRichText(richText) }}
+          />
+        ) : text ? (
+          <p style={{ marginBottom: imageUrl ? '0.8rem' : 0, whiteSpace: 'pre-line' }}>{text}</p>
+        ) : null}
         {imageUrl ? <img src={imageUrl} alt={`${displayName} response`} style={cardImageStyles} /> : null}
       </div>
     );
@@ -117,9 +134,9 @@ export default function Newsletter() {
                 <p>No responses yet.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                  {sectionAnswers.map((answer) =>
-                    renderAnswerCard(answer.id, answer.author_email, answer.text, answer.image_url),
-                  )}
+                    {sectionAnswers.map((answer) =>
+                      renderAnswerCard(answer.id, answer.author_email, answer.text, answer.rich_text, answer.image_url),
+                    )}
                 </div>
               )}
             </div>
@@ -136,9 +153,16 @@ export default function Newsletter() {
                 const questionAnswers = data.questionAnswers.filter((answer) => answer.question_id === question.id);
                 return (
                   <div key={question.id} style={{ borderTop: '1px solid var(--surface-border)', paddingTop: '1rem' }}>
-                    <p style={{ fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
+                  {question.rich_text ? (
+                    <div
+                      style={{ fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeRichText(question.rich_text) }}
+                    />
+                  ) : (
+                    <p style={{ fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)', whiteSpace: 'pre-line' }}>
                       {question.text}
                     </p>
+                  )}
                     <p style={{ fontSize: '0.85rem', marginBottom: '0.7rem' }}>
                       Asked by {getDisplayName(question.author_email, nicknameMap)}
                     </p>
@@ -146,9 +170,9 @@ export default function Newsletter() {
                       <p>No one answered this question.</p>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                        {questionAnswers.map((answer) =>
-                          renderAnswerCard(answer.id, answer.author_email, answer.text, answer.image_url),
-                        )}
+                      {questionAnswers.map((answer) =>
+                        renderAnswerCard(answer.id, answer.author_email, answer.text, answer.rich_text, answer.image_url),
+                      )}
                       </div>
                     )}
                   </div>

@@ -192,10 +192,10 @@ export const fetchLoopBundle = async (loopId: string): Promise<LoopBundle> => {
 
   const [loopResult, questionsResult, questionAnswersResult, sectionPromptsResult, promptAnswersResult, invitesResult] = await Promise.all([
     getLoopById(loopId),
-    supabase.from('questions').select('id, loop_id, author_email, text, created_at').eq('loop_id', loopId).order('created_at', { ascending: true }),
+    supabase.from('questions').select('id, loop_id, author_email, text, rich_text, created_at').eq('loop_id', loopId).order('created_at', { ascending: true }),
     supabase
       .from('question_answers')
-      .select('id, loop_id, question_id, author_email, text, image_url, image_path, image_mime, image_size, created_at')
+      .select('id, loop_id, question_id, author_email, text, rich_text, image_url, image_path, image_mime, image_size, created_at')
       .eq('loop_id', loopId)
       .order('created_at', { ascending: true }),
     supabase
@@ -205,7 +205,7 @@ export const fetchLoopBundle = async (loopId: string): Promise<LoopBundle> => {
       .order('display_order', { ascending: true }),
     supabase
       .from('prompt_answers')
-      .select('id, loop_id, prompt_id, author_email, text, image_url, image_path, image_mime, image_size, created_at')
+      .select('id, loop_id, prompt_id, author_email, text, rich_text, image_url, image_path, image_mime, image_size, created_at')
       .eq('loop_id', loopId)
       .order('created_at', { ascending: true }),
     supabase
@@ -330,7 +330,7 @@ export const uploadAnswerImage = async (loopId: string, file: File): Promise<Upl
   };
 };
 
-export const addQuestion = async (loopId: string, text: string): Promise<void> => {
+export const addQuestion = async (loopId: string, text: string, richText?: string): Promise<void> => {
   const ctx = await ensureInvitedContext();
   const loop = await getLoopById(loopId);
 
@@ -339,7 +339,8 @@ export const addQuestion = async (loopId: string, text: string): Promise<void> =
   }
 
   const trimmed = text.trim();
-  if (trimmed.length === 0) {
+  const richTrimmed = (richText ?? '').trim();
+  if (trimmed.length === 0 && richTrimmed.length === 0) {
     throw new Error('Question cannot be empty.');
   }
 
@@ -347,6 +348,7 @@ export const addQuestion = async (loopId: string, text: string): Promise<void> =
     loop_id: loopId,
     author_email: ctx.email,
     text: trimmed,
+    rich_text: richText ?? trimmed,
   });
 
   if (error) {
@@ -449,7 +451,7 @@ export const getQuestionDraft = async (loopId: string): Promise<QuestionDraft | 
 
   const { data, error } = await supabase
     .from('question_drafts')
-    .select('loop_id, author_email, text, updated_at')
+    .select('loop_id, author_email, text, rich_text, updated_at')
     .eq('loop_id', loopId)
     .eq('author_email', ctx.email)
     .maybeSingle<QuestionDraft>();
@@ -461,7 +463,7 @@ export const getQuestionDraft = async (loopId: string): Promise<QuestionDraft | 
   return data ?? null;
 };
 
-export const saveQuestionDraft = async (loopId: string, text: string): Promise<void> => {
+export const saveQuestionDraft = async (loopId: string, text: string, richText?: string): Promise<void> => {
   const ctx = await ensureInvitedContext();
   const trimmed = text.trim();
 
@@ -483,6 +485,7 @@ export const saveQuestionDraft = async (loopId: string, text: string): Promise<v
     loop_id: loopId,
     author_email: ctx.email,
     text: trimmed,
+    rich_text: richText ?? trimmed,
     updated_at: new Date().toISOString(),
   });
 
@@ -508,7 +511,7 @@ export const listAnswerDrafts = async (loopId: string): Promise<AnswerDraft[]> =
   const ctx = await ensureInvitedContext();
   const { data, error } = await supabase
     .from('answer_drafts')
-    .select('loop_id, item_type, item_id, author_email, text, image_url, image_path, image_mime, image_size, updated_at')
+    .select('loop_id, item_type, item_id, author_email, text, rich_text, image_url, image_path, image_mime, image_size, updated_at')
     .eq('loop_id', loopId)
     .eq('author_email', ctx.email)
     .order('updated_at', { ascending: false });
@@ -526,6 +529,7 @@ export const saveAnswerDraft = async (
   itemId: string,
   text: string,
   image?: UploadedImage,
+  richText?: string,
 ): Promise<void> => {
   const ctx = await ensureInvitedContext();
   const trimmed = text.trim();
@@ -552,6 +556,7 @@ export const saveAnswerDraft = async (
     item_id: itemId,
     author_email: ctx.email,
     text: trimmed,
+    rich_text: richText ?? trimmed,
     image_url: image?.image_url ?? null,
     image_path: image?.image_path ?? null,
     image_mime: image?.image_mime ?? null,

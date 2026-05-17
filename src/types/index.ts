@@ -24,6 +24,7 @@ export interface Question {
   loop_id: string;
   author_email: string;
   text: string;
+  rich_text: string | null;
   created_at: string;
 }
 
@@ -33,6 +34,7 @@ export interface QuestionAnswer {
   question_id: string;
   author_email: string;
   text: string;
+  rich_text: string | null;
   image_url: string | null;
   image_path: string | null;
   image_mime: string | null;
@@ -55,6 +57,7 @@ export interface PromptAnswer {
   prompt_id: string;
   author_email: string;
   text: string;
+  rich_text: string | null;
   image_url: string | null;
   image_path: string | null;
   image_mime: string | null;
@@ -66,6 +69,7 @@ export interface QuestionDraft {
   loop_id: string;
   author_email: string;
   text: string;
+  rich_text: string | null;
   updated_at: string;
 }
 
@@ -75,6 +79,7 @@ export interface AnswerDraft {
   item_id: string;
   author_email: string;
   text: string;
+  rich_text: string | null;
   image_url: string | null;
   image_path: string | null;
   image_mime: string | null;

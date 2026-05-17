@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { useParams } from 'react-router-dom';
 import {
   buildNicknameMap,
@@ -21,14 +22,108 @@ export default function SubmitUpdate() {
   const [viewerEmail, setViewerEmail] = useState<string | null>(null);
 
   const [newQuestion, setNewQuestion] = useState('');
-  const [promptAnswers, setPromptAnswers] = useState<Record<string, string>>({});
-  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+  const [newQuestionRich, setNewQuestionRich] = useState('');
+  const [promptAnswersRich, setPromptAnswersRich] = useState<Record<string, string>>({});
+  const [questionAnswersRich, setQuestionAnswersRich] = useState<Record<string, string>>({});
   const [promptImageDrafts, setPromptImageDrafts] = useState<Record<string, UploadedImage | null>>({});
   const [questionImageDrafts, setQuestionImageDrafts] = useState<Record<string, UploadedImage | null>>({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [draftState, setDraftState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [draftTimer, setDraftTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  const sanitizeRichText = (value: string) => {
+    const sanitized = DOMPurify.sanitize(value, {
+      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a'],
+      ALLOWED_ATTR: ['href', 'target', 'rel'],
+    });
+    return sanitized.replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ');
+  };
+
+  const toPlainText = (value: string) => {
+    const temp = document.createElement('div');
+    temp.innerHTML = value;
+    return temp.textContent ?? '';
+  };
+
+  const RichTextEditor = ({
+    value,
+    onChange,
+    placeholder,
+    disabled,
+  }: {
+    value: string;
+    onChange: (next: string) => void;
+    placeholder?: string;
+    disabled?: boolean;
+  }) => {
+    const ref = useRef<HTMLDivElement | null>(null);
+    const [focused, setFocused] = useState(false);
+
+    useEffect(() => {
+      if (!ref.current || focused) return;
+      if (ref.current.innerHTML !== value) {
+        ref.current.innerHTML = value;
+      }
+    }, [value, focused]);
+
+    const exec = (command: string, commandValue?: string) => {
+      if (disabled) return;
+      document.execCommand(command, false, commandValue);
+      const html = ref.current?.innerHTML ?? '';
+      onChange(html === '<p><br></p>' ? '' : html);
+    };
+
+    const handleLink = () => {
+      if (disabled) return;
+      const url = window.prompt('Enter link');
+      if (!url) return;
+      const normalized = url.startsWith('http') ? url : `https://${url}`;
+      exec('createLink', normalized);
+    };
+
+    return (
+      <div>
+        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('bold')}>
+            Bold
+          </button>
+          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('italic')}>
+            Italic
+          </button>
+          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('underline')}>
+            Underline
+          </button>
+          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('insertOrderedList')}>
+            1.
+          </button>
+          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('insertUnorderedList')}>
+            •
+          </button>
+          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={handleLink}>
+            Link
+          </button>
+          <button type="button" className="btn btn-secondary" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => exec('removeFormat')}>
+            Clear
+          </button>
+        </div>
+        <div
+          ref={ref}
+          className="rich-editor"
+          contentEditable={!disabled}
+          onInput={() => {
+            const html = ref.current?.innerHTML ?? '';
+            onChange(html === '<p><br></p>' ? '' : html);
+          }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          data-placeholder={placeholder}
+          suppressContentEditableWarning
+          style={{ minHeight: '140px' }}
+        />
+      </div>
+    );
+  };
 
   const loadData = useCallback(async () => {
     if (!loopId) return;
@@ -42,17 +137,25 @@ export default function SubmitUpdate() {
       ]);
       setData(bundle);
       setViewerEmail(email);
-      if (questionDraft?.text) {
-        setNewQuestion(questionDraft.text);
+      if (questionDraft?.text || questionDraft?.rich_text) {
+        const draftValue = questionDraft.rich_text ?? questionDraft.text;
+        const plain = toPlainText(draftValue);
+        setNewQuestion(plain);
+        setNewQuestionRich(sanitizeRichText(draftValue));
       }
       if (answerDrafts.length > 0) {
         const promptDrafts: Record<string, string> = {};
         const questionDraftMap: Record<string, string> = {};
+        const promptDraftsRich: Record<string, string> = {};
+        const questionDraftsRich: Record<string, string> = {};
         const promptImagesDraftMap: Record<string, UploadedImage | null> = {};
         const questionImagesDraftMap: Record<string, UploadedImage | null> = {};
         answerDrafts.forEach((draft) => {
           if (draft.item_type === 'prompt') {
-            promptDrafts[draft.item_id] = draft.text;
+            const value = draft.rich_text ?? draft.text;
+            const plain = toPlainText(value);
+            promptDrafts[draft.item_id] = plain;
+            promptDraftsRich[draft.item_id] = sanitizeRichText(value);
             promptImagesDraftMap[draft.item_id] = draft.image_url
               ? {
                   image_url: draft.image_url,
@@ -62,7 +165,10 @@ export default function SubmitUpdate() {
                 }
               : null;
           } else {
-            questionDraftMap[draft.item_id] = draft.text;
+            const value = draft.rich_text ?? draft.text;
+            const plain = toPlainText(value);
+            questionDraftMap[draft.item_id] = plain;
+            questionDraftsRich[draft.item_id] = sanitizeRichText(value);
             questionImagesDraftMap[draft.item_id] = draft.image_url
               ? {
                   image_url: draft.image_url,
@@ -73,8 +179,8 @@ export default function SubmitUpdate() {
               : null;
           }
         });
-        setPromptAnswers((prev) => ({ ...promptDrafts, ...prev }));
-        setQuestionAnswers((prev) => ({ ...questionDraftMap, ...prev }));
+        setPromptAnswersRich((prev) => ({ ...promptDraftsRich, ...prev }));
+        setQuestionAnswersRich((prev) => ({ ...questionDraftsRich, ...prev }));
         setPromptImageDrafts((prev) => ({ ...promptImagesDraftMap, ...prev }));
         setQuestionImageDrafts((prev) => ({ ...questionImagesDraftMap, ...prev }));
       }
@@ -125,8 +231,11 @@ export default function SubmitUpdate() {
 
     setSyncing(true);
     try {
-      await addQuestion(loopId, newQuestion);
+      const sanitized = sanitizeRichText(newQuestionRich);
+      const plain = toPlainText(sanitized);
+      await addQuestion(loopId, plain, sanitized);
       setNewQuestion('');
+      setNewQuestionRich('');
       await clearQuestionDraft(loopId);
       await loadData();
     } catch (error) {
@@ -141,7 +250,10 @@ export default function SubmitUpdate() {
     if (!file || !loopId) {
       setPromptImageDrafts((prev) => ({ ...prev, [promptId]: null }));
       if (loopId) {
-        scheduleDraftSave(() => saveAnswerDraft(loopId, 'prompt', promptId, promptAnswers[promptId] ?? '', undefined));
+        const richValue = promptAnswersRich[promptId] ?? '';
+        const sanitized = sanitizeRichText(richValue);
+        const plain = toPlainText(sanitized);
+        scheduleDraftSave(() => saveAnswerDraft(loopId, 'prompt', promptId, plain, undefined, sanitized));
       }
       return;
     }
@@ -151,7 +263,10 @@ export default function SubmitUpdate() {
       const image = await uploadIfPresent(file);
       if (image) {
         setPromptImageDrafts((prev) => ({ ...prev, [promptId]: image }));
-        await saveAnswerDraft(loopId, 'prompt', promptId, promptAnswers[promptId] ?? '', image);
+        const richValue = promptAnswersRich[promptId] ?? '';
+        const sanitized = sanitizeRichText(richValue);
+        const plain = toPlainText(sanitized);
+        await saveAnswerDraft(loopId, 'prompt', promptId, plain, image, sanitized);
         setDraftState('saved');
       }
     } catch (error) {
@@ -166,7 +281,10 @@ export default function SubmitUpdate() {
     if (!file || !loopId) {
       setQuestionImageDrafts((prev) => ({ ...prev, [questionId]: null }));
       if (loopId) {
-        scheduleDraftSave(() => saveAnswerDraft(loopId, 'question', questionId, questionAnswers[questionId] ?? '', undefined));
+        const richValue = questionAnswersRich[questionId] ?? '';
+        const sanitized = sanitizeRichText(richValue);
+        const plain = toPlainText(sanitized);
+        scheduleDraftSave(() => saveAnswerDraft(loopId, 'question', questionId, plain, undefined, sanitized));
       }
       return;
     }
@@ -176,7 +294,10 @@ export default function SubmitUpdate() {
       const image = await uploadIfPresent(file);
       if (image) {
         setQuestionImageDrafts((prev) => ({ ...prev, [questionId]: image }));
-        await saveAnswerDraft(loopId, 'question', questionId, questionAnswers[questionId] ?? '', image);
+        const richValue = questionAnswersRich[questionId] ?? '';
+        const sanitized = sanitizeRichText(richValue);
+        const plain = toPlainText(sanitized);
+        await saveAnswerDraft(loopId, 'question', questionId, plain, image, sanitized);
         setDraftState('saved');
       }
     } catch (error) {
@@ -221,18 +342,19 @@ export default function SubmitUpdate() {
               Add any question you want the group to answer in phase 2.
             </p>
             <form onSubmit={handleAddQuestion}>
-              <textarea
-                placeholder="Ask something fun, thoughtful, or reflective..."
-                value={newQuestion}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setNewQuestion(value);
+              <RichTextEditor
+                value={newQuestionRich}
+                onChange={(value) => {
+                  const sanitized = sanitizeRichText(value);
+                  const plain = toPlainText(sanitized);
+                  setNewQuestionRich(sanitized);
+                  setNewQuestion(plain);
                   if (loopId) {
-                    scheduleDraftSave(() => saveQuestionDraft(loopId, value));
+                    scheduleDraftSave(() => saveQuestionDraft(loopId, plain, sanitized));
                   }
                 }}
+                placeholder="Ask something fun, thoughtful, or reflective..."
                 disabled={syncing}
-                required
               />
               <div style={{ marginTop: '0.8rem', display: 'flex', justifyContent: 'flex-end' }}>
                 <button className="btn" disabled={syncing}>
@@ -251,7 +373,14 @@ export default function SubmitUpdate() {
                   <p style={{ fontSize: '0.85rem', marginBottom: '0.3rem' }}>
                     Asked by <strong>{getDisplayName(question.author_email, nicknameMap)}</strong>
                   </p>
-                  <p style={{ color: 'var(--text-primary)' }}>{question.text}</p>
+                  {question.rich_text ? (
+                    <div
+                      style={{ color: 'var(--text-primary)' }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeRichText(question.rich_text) }}
+                    />
+                  ) : (
+                    <p style={{ color: 'var(--text-primary)', whiteSpace: 'pre-line' }}>{question.text}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -266,16 +395,17 @@ export default function SubmitUpdate() {
               <div className="card" key={prompt.id}>
                 <h3>{prompt.title === 'Announcements' ? '📣 Announcements' : prompt.title === 'Shout-outs' ? '🙌 Shout-outs' : '💭 Mann-ki-baat'}</h3>
                 <div>
-                  <textarea
-                    placeholder="Write your response (optional if uploading image)..."
-                    value={promptAnswers[prompt.id] ?? ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setPromptAnswers((prev) => ({ ...prev, [prompt.id]: value }));
+                  <RichTextEditor
+                    value={promptAnswersRich[prompt.id] ?? ''}
+                    onChange={(value) => {
+                      const sanitized = sanitizeRichText(value);
+                      const plain = toPlainText(sanitized);
+                      setPromptAnswersRich((prev) => ({ ...prev, [prompt.id]: sanitized }));
                       if (loopId) {
-                        scheduleDraftSave(() => saveAnswerDraft(loopId, 'prompt', prompt.id, value, promptImageDrafts[prompt.id] ?? undefined));
+                        scheduleDraftSave(() => saveAnswerDraft(loopId, 'prompt', prompt.id, plain, promptImageDrafts[prompt.id] ?? undefined, sanitized));
                       }
                     }}
+                    placeholder="Write your response (optional if uploading image)..."
                     disabled={syncing}
                   />
                   <div style={{ marginTop: '0.6rem' }}>
@@ -311,19 +441,25 @@ export default function SubmitUpdate() {
               {data.questions.map((question) => (
                 <div className="card" key={question.id}>
                   <p style={{ marginBottom: '0.6rem', color: 'var(--text-primary)' }}>
-                    <strong>{getDisplayName(question.author_email, nicknameMap)}</strong> asked: {question.text}
+                      <strong>{getDisplayName(question.author_email, nicknameMap)}</strong> asked:{' '}
+                      {question.rich_text ? (
+                        <span dangerouslySetInnerHTML={{ __html: sanitizeRichText(question.rich_text) }} />
+                      ) : (
+                        <span>{question.text}</span>
+                      )}
                   </p>
                   <div>
-                    <textarea
-                      placeholder="Write your response (optional if uploading image)..."
-                      value={questionAnswers[question.id] ?? ''}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setQuestionAnswers((prev) => ({ ...prev, [question.id]: value }));
+                    <RichTextEditor
+                      value={questionAnswersRich[question.id] ?? ''}
+                      onChange={(value) => {
+                        const sanitized = sanitizeRichText(value);
+                        const plain = toPlainText(sanitized);
+                        setQuestionAnswersRich((prev) => ({ ...prev, [question.id]: sanitized }));
                         if (loopId) {
-                          scheduleDraftSave(() => saveAnswerDraft(loopId, 'question', question.id, value, questionImageDrafts[question.id] ?? undefined));
+                          scheduleDraftSave(() => saveAnswerDraft(loopId, 'question', question.id, plain, questionImageDrafts[question.id] ?? undefined, sanitized));
                         }
                       }}
+                      placeholder="Write your response (optional if uploading image)..."
                       disabled={syncing}
                     />
                     <div style={{ marginTop: '0.6rem' }}>

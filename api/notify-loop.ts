@@ -117,26 +117,22 @@ export default async function handler(req: any, res: any) {
     const link = `${origin}`.replace(/\/$/, '') + `/${path}/${loopId}`;
 
     const resend = new Resend(resendKey);
-    const results = [] as Array<{ email: string; id?: string }>;
-    for (const email of recipients) {
-      const response = await resend.emails.send({
-        from: 'LetterLoop <onboarding@resend.dev>',
-        to: email,
-        subject,
-        html: `
-          <div style="font-family: Arial, sans-serif; color: #111;">
-            <h2 style="margin-bottom: 8px;">${title}</h2>
-            <p style="margin: 0 0 12px;">${body}</p>
-            <p style="margin: 0 0 20px;"><strong>${loop.title}</strong></p>
-            <a href="${link}" style="display: inline-block; padding: 10px 16px; background: #111827; color: #fff; text-decoration: none; border-radius: 6px;">Open LetterLoop</a>
-          </div>
-        `,
-        text: `${title}\n\n${body}\n\n${loop.title}\n${link}`,
-      });
-      results.push({ email, id: (response as { id?: string }).id });
-    }
+    await resend.emails.send({
+      from: 'LetterLoop <onboarding@resend.dev>',
+      to: recipients,
+      subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #111;">
+          <h2 style="margin-bottom: 8px;">${title}</h2>
+          <p style="margin: 0 0 12px;">${body}</p>
+          <p style="margin: 0 0 20px;"><strong>${loop.title}</strong></p>
+          <a href="${link}" style="display: inline-block; padding: 10px 16px; background: #111827; color: #fff; text-decoration: none; border-radius: 6px;">Open LetterLoop</a>
+        </div>
+      `,
+      text: `${title}\n\n${body}\n\n${loop.title}\n${link}`,
+    });
 
-    res.status(200).json({ ok: true, sent: results.length, results });
+    res.status(200).json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Email send failed' });
   }

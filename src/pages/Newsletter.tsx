@@ -1,18 +1,9 @@
 import { useState, useEffect, type CSSProperties } from 'react';
-import DOMPurify from 'dompurify';
-
-const sanitizeRichText = (value: string) => {
-  const withDivsConverted = value.replace(/<div[^>]*>/gi, '<p>').replace(/<\/div>/gi, '</p>');
-  const sanitized = DOMPurify.sanitize(withDivsConverted, {
-    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a', 'div'],
-    ALLOWED_ATTR: ['href', 'target', 'rel'],
-  });
-  return sanitized.replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ');
-};
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Share2 } from 'lucide-react';
 import { buildNicknameMap, fetchLoopBundle, getDisplayName } from '../lib/store';
 import type { LoopBundle } from '../lib/store';
+import { sanitizeRichText } from '../lib/richText';
 
 const cardImageStyles: CSSProperties = {
   width: 'min(380px, 100%)',

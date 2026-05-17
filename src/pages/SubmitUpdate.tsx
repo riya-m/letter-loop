@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import DOMPurify from 'dompurify';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   buildNicknameMap,
@@ -15,6 +14,8 @@ import {
   uploadAnswerImage,
 } from '../lib/store';
 import type { LoopBundle, UploadedImage } from '../lib/store';
+import RichTextEditor from '../components/RichTextEditor';
+import { sanitizeRichText, toPlainText } from '../lib/richText';
 
 export default function SubmitUpdate() {
   const { loopId } = useParams();
@@ -31,128 +32,6 @@ export default function SubmitUpdate() {
   const [syncing, setSyncing] = useState(false);
   const [draftState, setDraftState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [draftTimer, setDraftTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-
-  const sanitizeRichText = (value: string) => {
-    const withDivsConverted = value.replace(/<div[^>]*>/gi, '<p>').replace(/<\/div>/gi, '</p>');
-    const sanitized = DOMPurify.sanitize(withDivsConverted, {
-      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a', 'div'],
-      ALLOWED_ATTR: ['href', 'target', 'rel'],
-    });
-    return sanitized.replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ');
-  };
-
-  const toPlainText = (value: string) => {
-    const temp = document.createElement('div');
-    temp.innerHTML = value;
-    return temp.textContent ?? '';
-  };
-
-  const RichTextEditor = ({
-    value,
-    onChange,
-    placeholder,
-    disabled,
-  }: {
-    value: string;
-    onChange: (next: string) => void;
-    placeholder?: string;
-    disabled?: boolean;
-  }) => {
-    const ref = useRef<HTMLDivElement | null>(null);
-    const [focused, setFocused] = useState(false);
-    const selectionRef = useRef<Range | null>(null);
-
-    useEffect(() => {
-      if (!ref.current || focused) return;
-      if (ref.current.innerHTML !== value) {
-        ref.current.innerHTML = value;
-      }
-    }, [value, focused]);
-
-    const saveSelection = () => {
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount > 0) {
-        selectionRef.current = sel.getRangeAt(0).cloneRange();
-      }
-    };
-
-    const restoreSelection = () => {
-      if (selectionRef.current) {
-        const sel = window.getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(selectionRef.current);
-      }
-    };
-
-    const exec = (command: string, commandValue?: string) => {
-      if (disabled) return;
-      restoreSelection();
-      document.execCommand(command, false, commandValue);
-      const html = ref.current?.innerHTML ?? '';
-      onChange(html === '<p><br></p>' ? '' : html);
-    };
-
-    const handleLink = () => {
-      if (disabled) return;
-      const url = window.prompt('Enter link');
-      if (!url) return;
-      const normalized = url.startsWith('http') ? url : `https://${url}`;
-      exec('createLink', normalized);
-    };
-
-    const toolbarBtnStyle: React.CSSProperties = {
-      padding: '0.3rem 0.6rem',
-      fontSize: '0.85rem',
-      background: '#fff',
-      border: '1px solid var(--surface-border)',
-      borderRadius: '6px',
-      cursor: 'pointer',
-      color: 'var(--text-primary)',
-      fontWeight: 500,
-    };
-
-    return (
-      <div>
-        <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.5rem', flexWrap: 'wrap', padding: '0.4rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid var(--surface-border)' }}>
-          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('bold')}>
-            <strong>B</strong>
-          </button>
-          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('italic')}>
-            <em>I</em>
-          </button>
-          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('underline')}>
-            <u>U</u>
-          </button>
-          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('insertOrderedList')}>
-            1.
-          </button>
-          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('insertUnorderedList')}>
-            •
-          </button>
-          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={handleLink}>
-            🔗
-          </button>
-          <button type="button" style={toolbarBtnStyle} disabled={disabled} onMouseDown={(e) => { e.preventDefault(); saveSelection(); }} onClick={() => exec('removeFormat')}>
-            ✕
-          </button>
-        </div>
-        <div
-          ref={ref}
-          className="rich-editor"
-          contentEditable={!disabled}
-          onInput={() => {
-            const html = ref.current?.innerHTML ?? '';
-            onChange(html === '<p><br></p>' ? '' : html);
-          }}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          data-placeholder={placeholder}
-          suppressContentEditableWarning
-          style={{ minHeight: '140px' }}
-        />
-      </div>
-    );
-  };
 
   const loadData = useCallback(async () => {
     if (!loopId) return;
@@ -173,8 +52,6 @@ export default function SubmitUpdate() {
         setNewQuestionRich(sanitizeRichText(draftValue));
       }
       if (answerDrafts.length > 0) {
-        const promptDrafts: Record<string, string> = {};
-        const questionDraftMap: Record<string, string> = {};
         const promptDraftsRich: Record<string, string> = {};
         const questionDraftsRich: Record<string, string> = {};
         const promptImagesDraftMap: Record<string, UploadedImage | null> = {};
@@ -182,8 +59,6 @@ export default function SubmitUpdate() {
         answerDrafts.forEach((draft) => {
           if (draft.item_type === 'prompt') {
             const value = draft.rich_text ?? draft.text;
-            const plain = toPlainText(value);
-            promptDrafts[draft.item_id] = plain;
             promptDraftsRich[draft.item_id] = sanitizeRichText(value);
             promptImagesDraftMap[draft.item_id] = draft.image_url
               ? {
@@ -195,8 +70,6 @@ export default function SubmitUpdate() {
               : null;
           } else {
             const value = draft.rich_text ?? draft.text;
-            const plain = toPlainText(value);
-            questionDraftMap[draft.item_id] = plain;
             questionDraftsRich[draft.item_id] = sanitizeRichText(value);
             questionImagesDraftMap[draft.item_id] = draft.image_url
               ? {

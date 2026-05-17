@@ -10,8 +10,6 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const resendKey = process.env.RESEND_API_KEY;
 
 const allowedEvents = new Set(['phase1', 'phase2', 'phase3']);
-const RATE_LIMIT_DELAY_MS = 250;
-const RETRY_DELAY_MS = 1200;
 
 const getEventCopy = (eventType: string) => {
   if (eventType === 'phase1') {
@@ -119,54 +117,23 @@ export default async function handler(req: any, res: any) {
     const link = `${origin}`.replace(/\/$/, '') + `/${path}/${loopId}`;
 
     const resend = new Resend(resendKey);
-    const results = [] as Array<{ email: string; id?: string; error?: string }>;
+    const results = [] as Array<{ email: string; id?: string }>;
     for (const email of recipients) {
-      try {
-        const response = await resend.emails.send({
-          from: 'LetterLoop <onboarding@resend.dev>',
-          to: email,
-          subject,
-          html: `
-            <div style="font-family: Arial, sans-serif; color: #111;">
-              <h2 style="margin-bottom: 8px;">${title}</h2>
-              <p style="margin: 0 0 12px;">${body}</p>
-              <p style="margin: 0 0 20px;"><strong>${loop.title}</strong></p>
-              <a href="${link}" style="display: inline-block; padding: 10px 16px; background: #111827; color: #fff; text-decoration: none; border-radius: 6px;">Open LetterLoop</a>
-            </div>
-          `,
-          text: `${title}\n\n${body}\n\n${loop.title}\n${link}`,
-        });
-        results.push({ email, id: (response as { id?: string }).id });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Email send failed';
-        if (message.includes('rate limit') || message.includes('429')) {
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-          try {
-            const response = await resend.emails.send({
-              from: 'LetterLoop <onboarding@resend.dev>',
-              to: email,
-              subject,
-              html: `
-                <div style="font-family: Arial, sans-serif; color: #111;">
-                  <h2 style="margin-bottom: 8px;">${title}</h2>
-                  <p style="margin: 0 0 12px;">${body}</p>
-                  <p style="margin: 0 0 20px;"><strong>${loop.title}</strong></p>
-                  <a href="${link}" style="display: inline-block; padding: 10px 16px; background: #111827; color: #fff; text-decoration: none; border-radius: 6px;">Open LetterLoop</a>
-                </div>
-              `,
-              text: `${title}\n\n${body}\n\n${loop.title}\n${link}`,
-            });
-            results.push({ email, id: (response as { id?: string }).id });
-          } catch (retryError) {
-            const retryMessage = retryError instanceof Error ? retryError.message : 'Email retry failed';
-            results.push({ email, error: retryMessage });
-          }
-        } else {
-          results.push({ email, error: message });
-        }
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_DELAY_MS));
+      const response = await resend.emails.send({
+        from: 'LetterLoop <onboarding@resend.dev>',
+        to: email,
+        subject,
+        html: `
+          <div style="font-family: Arial, sans-serif; color: #111;">
+            <h2 style="margin-bottom: 8px;">${title}</h2>
+            <p style="margin: 0 0 12px;">${body}</p>
+            <p style="margin: 0 0 20px;"><strong>${loop.title}</strong></p>
+            <a href="${link}" style="display: inline-block; padding: 10px 16px; background: #111827; color: #fff; text-decoration: none; border-radius: 6px;">Open LetterLoop</a>
+          </div>
+        `,
+        text: `${title}\n\n${body}\n\n${loop.title}\n${link}`,
+      });
+      results.push({ email, id: (response as { id?: string }).id });
     }
 
     res.status(200).json({ ok: true, sent: results.length, results });

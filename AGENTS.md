@@ -48,13 +48,16 @@
 - Removed jsonblob proxy config from Vite/Vercel config.
 - Replaced template README with project + SQL setup instructions.
 - **Rich text editor for questions and answers:**
-  - Custom `RichTextEditor` component using `contentEditable` (no external editor library).
+  - Custom `RichTextEditor` component extracted to `src/components/RichTextEditor.tsx` (no external editor library).
+  - Shared utilities in `src/lib/richText.ts`: `sanitizeRichText`, `toPlainText`, `normalizeLineBreaks`.
   - Toolbar: Bold, Italic, Underline, Ordered list, Unordered list, Link, Clear formatting.
-  - Sanitizes HTML with `DOMPurify` (allowed tags: p, br, strong, em, u, ul, ol, li, a).
+  - Elegant subtle styling: light background (`#f8f6f2`), small square buttons with hover effects, dividers between groups.
+  - Sanitizes HTML with `DOMPurify` (allowed tags: p, br, strong, em, b, i, u, ul, ol, li, a).
   - Stores both `rich_text` (sanitized HTML) and `text` (plain text) for each answer/question.
   - Draft autosave includes rich text.
   - Published view renders rich text with formatting preserved.
   - Links open in new tab with `noopener noreferrer`.
+  - Lists (`ul`, `ol`) styled with `list-style-position: inside` to prevent overflow in editor and published view.
 - **Phase-2 answer drafts with cloud autosave:**
   - Answers auto-save to Supabase on debounce (~900ms) while typing.
   - Drafts persist across refresh, tab switch, and devices.

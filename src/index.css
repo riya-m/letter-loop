@@ -168,6 +168,17 @@ textarea:focus {
   color: var(--text-secondary);
 }
 
+.rich-editor ul,
+.rich-editor ol {
+  margin: 0;
+  padding-left: 1.5rem;
+  list-style-position: inside;
+}
+
+.rich-editor li {
+  margin-bottom: 0.25rem;
+}
+
 .container {
   max-width: 860px;
   margin: 0 auto;

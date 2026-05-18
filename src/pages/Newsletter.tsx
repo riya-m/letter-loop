@@ -66,6 +66,7 @@ export default function Newsletter() {
         <p style={{ fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>{displayName}</p>
         {richText ? (
           <div
+            className="rich-text-content"
             style={{ marginBottom: imageUrl ? '0.8rem' : 0 }}
             dangerouslySetInnerHTML={{ __html: sanitizeRichText(richText) }}
           />
